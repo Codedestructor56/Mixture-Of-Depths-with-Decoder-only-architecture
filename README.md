@@ -1,4 +1,4 @@
-Just a simple decoder only transformer architecture with mixture of depth added in.
+Just a simple decoder only transformer architecture with mixture of depths added in.
 Papers used:
 1) GQ Attention: https://arxiv.org/abs/2305.13245
 2) Rotary Positional Embeddings: https://arxiv.org/abs/2104.09864
