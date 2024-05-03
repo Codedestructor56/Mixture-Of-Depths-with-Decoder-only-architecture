@@ -55,8 +55,11 @@ class MODRouter(nn.Module):
             rejected_tokens = res[torch.arange(res.size(0)).unsqueeze(1),botk_indices]
             
             res = self.encoders[layer](chosen_tokens,None)
-
-            res = res+rejected_tokens
+            if rejected_tokens.shape[1] == res.shape[1]:
+                res = res+rejected_tokens
+            else:
+                rejected_tokens = rejected_tokens[:,:res.shape[1],:]
+                res = res + rejected_tokens
 
             del route_weights,flattened_weights,topk_indices,sorted_top_k,chosen_tokens,all_indices,np_sorted_top_k,np_all_indices,botk_indices,rejected_tokens
             torch.cuda.empty_cache()
@@ -118,7 +121,7 @@ ds = load_dataset("HuggingFaceTB/cosmopedia-100k", split="train")
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Meta-Llama-3-8B")
 data = ModelParams(emb_dim=512, use_cache = False, device = device, num_heads=16, kv_num_heads=None,
-                   max_batch_size=10, max_seq_len=256, ffn_hidden_dim=512, theta=None, thresh=None,
+                   max_batch_size=10, max_seq_len=512, ffn_hidden_dim=512, theta=None, thresh=None,
                    n_layers = 1, vocab_size=tokenizer.vocab_size+1, div_batch=10, k_tokens = 128)
 
 
