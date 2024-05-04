@@ -55,12 +55,10 @@ class MODRouter(nn.Module):
             rejected_tokens = res[torch.arange(res.size(0)).unsqueeze(1),botk_indices]
             
             res = self.encoders[layer](chosen_tokens,None)
-            if rejected_tokens.shape[1] == res.shape[1]:
-                res = res+rejected_tokens
-            else:
-                rejected_tokens = rejected_tokens[:,:res.shape[1],:]
-                res = res + rejected_tokens
-
+            if rejected_tokens.shape[1] < self.seq_len - self.k_tokens:
+                rejected_tokens = torch.nn.functional.pad(rejected_tokens, (0,0,0,self.seq_len-self.k_tokens,0,0))
+            res = torch.cat((res,rejected_tokens),dim=1)
+            
             del route_weights,flattened_weights,topk_indices,sorted_top_k,chosen_tokens,all_indices,np_sorted_top_k,np_all_indices,botk_indices,rejected_tokens
             torch.cuda.empty_cache()
         return res
@@ -81,7 +79,9 @@ class Transformer(nn.Module):
 
     def forward(self, x:torch.Tensor, cur_pos: Optional[int])->torch.Tensor:
         assert self.div_batch<=x.shape[0], "Batch serializer should not exceed tensor dimensions"
+
         res = self.embeddings(x)
+  
         #layer_count = 0
         #stats = None
         #try:
@@ -116,18 +116,4 @@ class Transformer(nn.Module):
         #   torch.cuda.empty_cache()
         #    return torch;.zeros(x.shape[0], self.vocab_size)
 
-ds = load_dataset("HuggingFaceTB/cosmopedia-100k", split="train")
-
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
-tokenizer = AutoTokenizer.from_pretrained("meta-llama/Meta-Llama-3-8B")
-data = ModelParams(emb_dim=512, use_cache = False, device = device, num_heads=16, kv_num_heads=None,
-                   max_batch_size=10, max_seq_len=512, ffn_hidden_dim=512, theta=None, thresh=None,
-                   n_layers = 1, vocab_size=tokenizer.vocab_size+1, div_batch=10, k_tokens = 128)
-
-
-dataloader = DataLoader(Data(ds, tokenizer, device, data.max_seq_len), batch_size = data.max_batch_size, collate_fn=Data(ds, tokenizer, device, data.max_seq_len).collate_fn)
-print(f"Vocab Size: {tokenizer.vocab_size}")
-to_load = next(iter(dataloader)).to(device)
-transformer = Transformer(data)
-print(transformer(to_load, None))
 

@@ -46,11 +46,12 @@ def train_tokenizer(vocab_size: int, dataset, model_prefix:str="tokenizer", mode
    
 
 class Data(Dataset):
-    def __init__(self, dataset, tokenizer, device:str, max_seq_len:Optional[int]):
+    def __init__(self, dataset, tokenizer, params: ModelParams):
         self.dataset = dataset
         self.tokenizer = tokenizer
-        self.max_seq_len = max_seq_len
-        self.device = device
+        self.max_seq_len = params.max_seq_len
+        self.device = params.device
+        self.train = not params.use_cache
 
     def __len__(self):
         return len(self.dataset)
@@ -58,15 +59,27 @@ class Data(Dataset):
     def __getitem__(self, idx):
         prompt =  self.dataset['prompt'][idx]
         text = self.dataset['text'][idx]
-        concat_text = f"Question: {prompt} Answer: {text}"
-        tokenized_text = self.tokenizer.encode(concat_text)
-       
-        to_ret = torch.tensor(tokenized_text, dtype = torch.int32).to(self.device)
-        return to_ret[:self.max_seq_len]
+        if self.train:
+            encoded_prompt = torch.tensor(self.tokenizer.encode(prompt),dtype = torch.int32)
+            encoded_text = torch.tensor(self.tokenizer.encode(text), dtype = torch.int32)
+            return encoded_prompt[:self.max_seq_len],encoded_text[:self.max_seq_len]
+        else:
+            concat_text = f"Question: {prompt} Answer: {text}"
+            tokenized_text = self.tokenizer.encode(concat_text)
+        
+            to_ret = torch.tensor(tokenized_text, dtype = torch.int32).to(self.device)
+            return to_ret[:self.max_seq_len]
 
     def collate_fn(self, batch):
-        padded_batch = pad_sequence(batch, batch_first=True, padding_value=0)
-        return padded_batch.to(self.device)
+        if torch.is_tensor(batch):
+            padded_batch = pad_sequence(batch, batch_first=True, padding_value=0)
+            return padded_batch.to(self.device)
+        else:
+            batch = list(zip(*batch))
+            padded_prompt = pad_sequence(batch[0], batch_first=True, padding_value=0)
+            padded_text = pad_sequence(batch[1], batch_first=True, padding_value=0)
+            
+            return padded_prompt.to(self.device), padded_text.to(self.device)
 
 class RotaryEmbeddings(nn.Module):
     def __init__(self, device:str, theta: int =10000):
